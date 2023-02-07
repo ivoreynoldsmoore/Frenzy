@@ -101,6 +101,48 @@ namespace AcidSprayMod
 
     public class FireAcidSpray : BaseSkillState
     {
+        public GameObject effectPrefab;
+
+        public static GameObject impactEffectPrefab;
+
+        private CrocoDamageTypeController crocoDamageTypeController;
+
+        public static float maxDistance;
+
+        public static float radius;
+
+        public static float baseEntryDuration = 0.5f;
+
+        public static float baseAcidSprayDuration = 1.5f;
+
+        public static float damageCoefficient = 1f;
+
+        public static float procCoefficient;
+
+        public static float tickFrequency;
+
+        public static float force = 10f;
+
+        public static float stopwatch;
+
+        public static string startAttackSoundString;
+
+        public static string endAttackSoundString;
+
+        public static string muzzleName;
+
+        public static float recoilForce;
+
+        private bool isCrit;
+
+        private bool hasBegunAcidSpray;
+
+        private float entryDuration;
+
+        private float acidSprayDuration;
+
+        private float acidSprayStopwatch;
+
         public override void OnEnter()
         {
             base.OnEnter();
@@ -114,11 +156,64 @@ namespace AcidSprayMod
         public override void FixedUpdate()
         {
             base.FixedUpdate();
+            stopwatch += Time.fixedDeltaTime;
+            if (stopwatch >= entryDuration && !hasBegunAcidSpray)
+            {
+                hasBegunAcidSpray = true;
+                Util.PlaySound(startAttackSoundString, base.gameObject);
+                PlayAnimation("Gesture, Mouth", "FireSpit", "FireSpit.playbackRate", acidSprayDuration);
+                FireAcid();
+            }
+            if (hasBegunAcidSpray)
+            {
+                acidSprayStopwatch += Time.deltaTime;
+                float num = 1f / tickFrequency / attackSpeedStat;
+                if (acidSprayStopwatch > num)
+                {
+                    acidSprayStopwatch -= num;
+                    FireAcid();
+                }
+            }
+            if (stopwatch >= acidSprayDuration + entryDuration && base.isAuthority)
+            {
+                outer.SetNextStateToMain();
+            }
         }
 
         public override InterruptPriority GetMinimumInterruptPriority()
         {
             return InterruptPriority.Skill;
+        }
+
+        private void FireAcid()
+        {
+            Ray aimRay = GetAimRay();
+            if (base.isAuthority)
+            {
+                BulletAttack bulletAttack = new BulletAttack();
+                bulletAttack.owner = base.gameObject;
+                bulletAttack.weapon = base.gameObject;
+                bulletAttack.origin = aimRay.origin;
+                bulletAttack.aimVector = aimRay.direction;
+                bulletAttack.minSpread = 0f;
+                bulletAttack.damage = damageCoefficient * damageStat;
+                bulletAttack.force = force;
+                bulletAttack.muzzleName = muzzleName;
+                bulletAttack.hitEffectPrefab = impactEffectPrefab;
+                bulletAttack.isCrit = isCrit;
+                bulletAttack.radius = radius;
+                bulletAttack.falloffModel = BulletAttack.FalloffModel.None;
+                bulletAttack.stopperMask = LayerIndex.world.mask;
+                bulletAttack.procCoefficient = procCoefficient;
+                bulletAttack.maxDistance = maxDistance;
+                bulletAttack.smartCollision = true;
+                bulletAttack.damageType = (crocoDamageTypeController ? crocoDamageTypeController.GetDamageType() : DamageType.Generic);
+                bulletAttack.Fire();
+                if ((bool)base.characterMotor)
+                {
+                    base.characterMotor.ApplyForce(aimRay.direction * (0f - recoilForce));
+                }
+            }
         }
     }
 }
