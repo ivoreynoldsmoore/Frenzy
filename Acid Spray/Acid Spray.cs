@@ -1,7 +1,9 @@
 using BepInEx;
+using EntityStates;
 using R2API;
 using R2API.Utils;
 using RoR2;
+using System;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 
@@ -29,7 +31,7 @@ namespace AcidSprayMod
         public const string PluginGUID = PluginAuthor + "." + PluginName;
         public const string PluginAuthor = "AuthorName";
         public const string PluginName = "Acid Spray";
-        public const string PluginVersion = "0.0.0";
+        public const string PluginVersion = "0.0.1";
 
         //We need our item definition to persist through our functions, and therefore make it a class field.
         private static ItemDef myItemDef;
@@ -56,7 +58,67 @@ namespace AcidSprayMod
             //The Description is where you put the actual numbers and give an advanced description.
             LanguageAPI.Add("CROCO_SPECIAL_ACIDSPRAY_DESCRIPTION", "Description");
         }
+
+        private void AddSkill()
+        {
+            GameObject crocoBodyPrefab = Addressables.LoadAssetAsync<GameObject>("RoR2/Base/Croco/CrocoBody.prefab").WaitForCompletion();
+            SkillLocator skillLocator = crocoBodyPrefab.GetComponent<SkillLocator>();
+            RoR2.Skills.SkillFamily specialSkillFamily = skillLocator.special.skillFamily;
+
+            RoR2.Skills.SkillDef acidSpray = ScriptableObject.CreateInstance<RoR2.Skills.SkillDef>();
+
+            acidSpray.activationState = new SerializableEntityStateType(typeof(FireAcidSpray));
+            acidSpray.activationStateMachineName = "Weapon";
+            acidSpray.baseMaxStock = 1;
+            acidSpray.baseRechargeInterval = 6f;
+            acidSpray.beginSkillCooldownOnSkillEnd = true;
+            acidSpray.resetCooldownTimerOnUse = true;
+            acidSpray.canceledFromSprinting = true;
+            acidSpray.cancelSprintingOnActivation = true;
+            acidSpray.fullRestockOnAssign = true;
+            acidSpray.interruptPriority = InterruptPriority.Skill;
+            acidSpray.isCombatSkill = true;
+            acidSpray.mustKeyPress = true;
+            acidSpray.rechargeStock = 1;
+            acidSpray.requiredStock = 1;
+            acidSpray.stockToConsume = 1;
+            acidSpray.icon = null;
+            acidSpray.skillName = "CROCO_SPECIAL_ACIDSPRAY_NAME";
+            acidSpray.skillNameToken = "CROCO_SPECIAL_ACIDSPRAY_NAME";
+            acidSpray.skillDescriptionToken = "CROCO_SPECIAL_ACIDSPRAY_DESCRIPTION";
+
+            ContentAddition.AddSkillDef(acidSpray);
+
+            Array.Resize(ref specialSkillFamily.variants, specialSkillFamily.variants.Length + 1);
+            specialSkillFamily.variants[specialSkillFamily.variants.Length - 1] = new RoR2.Skills.SkillFamily.Variant
+            {
+                skillDef = acidSpray,
+                unlockableDef = ScriptableObject.CreateInstance<UnlockableDef>(),
+                viewableNode = new ViewablesCatalog.Node(acidSpray.skillNameToken, false, null)
+            };
+        }
     }
 
+    public class FireAcidSpray : BaseSkillState
+    {
+        public override void OnEnter()
+        {
+            base.OnEnter();
+        }
 
+        public override void OnExit()
+        {
+            base.OnExit();
+        }
+
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+        }
+
+        public override InterruptPriority GetMinimumInterruptPriority()
+        {
+            return InterruptPriority.Skill;
+        }
+    }
 }
