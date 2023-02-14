@@ -69,4 +69,8 @@
     </Reference>
   </ItemGroup>
 
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="copy &quot;$(TargetPath)&quot; &quot;C:\Users\Ivo Reynolds-Moore\AppData\Roaming\r2modmanPlus-local\RiskOfRain2\profiles\Homemade Mods\BepInEx\plugins\Haggleman-Acid Spray&quot;" />
+  </Target>
+
 </Project>

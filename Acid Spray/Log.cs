@@ -1,6 +1,6 @@
 ﻿using BepInEx.Logging;
 
-namespace AcidSprayMod
+namespace FrenzyMod
 {
     internal static class Log
     {
