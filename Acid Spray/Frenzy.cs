@@ -8,6 +8,9 @@ using RoR2.UI;
 using System;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
+using System.Collections.Generic;
+using static RoR2.OverlapAttack;
+using Frenzy;
 
 namespace FrenzyMod
 {
@@ -46,6 +49,7 @@ namespace FrenzyMod
             AddSkill();
             ContentAddition.AddEntityState<ChargeFrenzy>(out _);
             ContentAddition.AddEntityState<FrenzyAttack>(out _);
+            Assets.PopulateAssets();
 
             // This line of log will appear in the bepinex console when the Awake method is done.
             Log.LogInfo(nameof(Awake) + " done.");
@@ -58,7 +62,7 @@ namespace FrenzyMod
             LanguageAPI.Add("CROCO_SPECIAL_FRENZY_NAME", "Frenzy");
 
             //The Description is where you put the actual numbers and give an advanced description.
-            LanguageAPI.Add("CROCO_SPECIAL_FRENZY_DESCRIPTION", "Description");
+            LanguageAPI.Add("CROCO_SPECIAL_FRENZY_DESCRIPTION", "<style=cIsHealing>Poisonous</style>. Rapidly slash at enemies in front of you for <style=cIsDamage>200%</style>.");
         }
 
         private void AddSkill()
@@ -66,6 +70,7 @@ namespace FrenzyMod
             GameObject crocoBodyPrefab = Addressables.LoadAssetAsync<GameObject>("RoR2/Base/Croco/CrocoBody.prefab").WaitForCompletion();
             SkillLocator skillLocator = crocoBodyPrefab.GetComponent<SkillLocator>();
             RoR2.Skills.SkillFamily specialSkillFamily = skillLocator.special.skillFamily;
+            RoR2.Skills.SkillFamily primarySkillFamily = skillLocator.primary.skillFamily;
 
             RoR2.Skills.SkillDef frenzy = ScriptableObject.CreateInstance<RoR2.Skills.SkillDef>();
 
@@ -84,7 +89,7 @@ namespace FrenzyMod
             frenzy.rechargeStock = 1;
             frenzy.requiredStock = 1;
             frenzy.stockToConsume = 1;
-            frenzy.icon = null;
+            frenzy.icon = primarySkillFamily.variants[0].skillDef.icon;
             frenzy.skillName = "CROCO_SPECIAL_FRENZY_NAME";
             frenzy.skillNameToken = "CROCO_SPECIAL_FRENZY_NAME";
             frenzy.skillDescriptionToken = "CROCO_SPECIAL_FRENZY_DESCRIPTION";
@@ -103,14 +108,9 @@ namespace FrenzyMod
 
     public class ChargeFrenzy : BaseSkillState
     {
+        public static float baseDuration = 0.8f;
 
-        public static float minChargeDuration = 0.25f;
-
-        public static float baseDuration = 1f;
-
-        public static float maxAttackDuration = 1.2f;
-
-        public static float minAttackDuration = 0.4f;
+        public static float attackDuration = 1.2f;
 
         private float duration;
 
@@ -126,12 +126,11 @@ namespace FrenzyMod
         public override void FixedUpdate()
         {
             base.FixedUpdate();
-            if (base.isAuthority && ((!IsKeyDownAuthority() && base.fixedAge >= minChargeDuration) || base.fixedAge >= duration))
+            if (base.isAuthority && ((!IsKeyDownAuthority() && base.fixedAge >= duration) || base.fixedAge >= duration))
             {
                 float charge =  Mathf.Clamp01(base.fixedAge / duration);
                 FrenzyAttack nextState = new FrenzyAttack();
-                float totalDuration = Util.Remap(charge, 0f, 1f, minAttackDuration, maxAttackDuration);
-                nextState.attackCount = (int)Math.Floor(totalDuration/FrenzyAttack.baseDurationParam);
+                nextState.attackCount = (int)Math.Floor(attackDuration/(FrenzyAttack.baseDurationParam/attackSpeedStat));
                 nextState.rightSwing = true;
                 outer.SetNextState(nextState);
             }
@@ -163,21 +162,23 @@ namespace FrenzyMod
 
         public override void OnEnter()
         {
+            recoilAmplitude = EntityStates.Croco.Slash.recoilAmplitude;
+            slashSound = EntityStates.Croco.Slash.slash1Sound;
+
             EntityStates.Croco.Slash slash = new();
             hitBoxGroupName = slash.hitBoxGroupName;
-            //mecanimHitboxActiveParameter = slash.mecanimHitboxActiveParameter;
-            hitPauseDuration = 0f;
-            ignoreAttackSpeed = false;
-            baseDuration = baseDurationParam;
-            base.OnEnter();
-
+            swingEffectPrefab = slash.swingEffectPrefab;
             bloom = slash.bloom;
-            slashSound = EntityStates.Croco.Slash.slash1Sound;
+
+            baseDuration = baseDurationParam;
+            ignoreAttackSpeed = false;
+            procCoefficient = 1f;
+            damageCoefficient = 1f;
+
+            base.OnEnter();
             base.characterDirection.forward = GetAimRay().direction;
             crocoDamageTypeController = GetComponent<CrocoDamageTypeController>();
 
-            procCoefficient = 1f;
-            damageCoefficient = 1f;
         }
 
         public override void OnExit()
@@ -202,10 +203,9 @@ namespace FrenzyMod
             {
                 animationStateName = "Slash2";
             }
-            Debug.Log("Animation Duration: " + duration);
-            Debug.Log("Animation Right Arm: " + rightSwing);
+            //Debug.Log("Animation Duration: " + duration);
             float num = Mathf.Max(duration, 0.2f);
-            Debug.Log("Animation Name: " + animationStateName);
+            //Debug.Log("Animation Name: " + animationStateName);
             PlayCrossfade("Gesture, Additive", animationStateName, "Slash.playbackRate", num, 0.05f);
             PlayCrossfade("Gesture, Override", animationStateName, "Slash.playbackRate", num, 0.05f);
             Util.PlaySound(slashSound, gameObject);
@@ -213,8 +213,11 @@ namespace FrenzyMod
 
         public override void OnMeleeHitAuthority()
         {
-            base.characterBody.AddSpreadBloom(bloom);
             base.OnMeleeHitAuthority();
+            base.characterBody.AddSpreadBloom(bloom);
+            //Debug.Log("Hit!");
+            //for (int i = 0; i < hitResults.Count; i++)
+            //    Debug.Log(hitResults[i].healthComponent.body.name);
         }
 
         public override void BeginMeleeAttackEffect()
@@ -223,8 +226,6 @@ namespace FrenzyMod
             AddRecoil(-0.1f * recoilAmplitude, 0.1f * recoilAmplitude, -1f * recoilAmplitude, 1f * recoilAmplitude);
             base.BeginMeleeAttackEffect();
         }
-
-
 
         public override void FixedUpdate()
         {
