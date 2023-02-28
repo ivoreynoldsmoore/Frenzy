@@ -10,7 +10,6 @@ using UnityEngine;
 using UnityEngine.AddressableAssets;
 using System.Collections.Generic;
 using static RoR2.OverlapAttack;
-using Frenzy;
 
 namespace FrenzyMod
 {
@@ -37,6 +36,7 @@ namespace FrenzyMod
         public const string PluginAuthor = "AuthorName";
         public const string PluginName = "Frenzy";
         public const string PluginVersion = "0.0.1";
+        public static PluginInfo pluginInfo;
 
         //The Awake() method is run at the very start when the game is initialized.
         public void Awake()
@@ -44,12 +44,13 @@ namespace FrenzyMod
             //Init our logging class so that we can properly log for debugging
             Log.Init(Logger);
 
+            pluginInfo = this.Info;
+
             //Now let's turn the tokens we made into actual strings for the game:
             AddTokens();
             AddSkill();
             ContentAddition.AddEntityState<ChargeFrenzy>(out _);
             ContentAddition.AddEntityState<FrenzyAttack>(out _);
-            Assets.PopulateAssets();
 
             // This line of log will appear in the bepinex console when the Awake method is done.
             Log.LogInfo(nameof(Awake) + " done.");
@@ -130,7 +131,7 @@ namespace FrenzyMod
             {
                 float charge =  Mathf.Clamp01(base.fixedAge / duration);
                 FrenzyAttack nextState = new FrenzyAttack();
-                nextState.attackCount = (int)Math.Floor(attackDuration/(FrenzyAttack.baseDurationParam/attackSpeedStat));
+                nextState.attackCount = Math.Max(1,(int)Math.Floor(attackDuration / (FrenzyAttack.baseDurationParam / attackSpeedStat)));
                 nextState.rightSwing = true;
                 outer.SetNextState(nextState);
             }
@@ -167,17 +168,20 @@ namespace FrenzyMod
 
             EntityStates.Croco.Slash slash = new();
             hitBoxGroupName = slash.hitBoxGroupName;
+            crocoDamageTypeController = GetComponent<CrocoDamageTypeController>();
             swingEffectPrefab = slash.swingEffectPrefab;
             bloom = slash.bloom;
+            Debug.Log(EntityStates.Croco.Slash.baseDurationBeforeInterruptable);
+            Debug.Log(EntityStates.Croco.Slash.comboFinisherBaseDurationBeforeInterruptable);
+            hitPauseDuration = 0.05f;
 
             baseDuration = baseDurationParam;
             ignoreAttackSpeed = false;
             procCoefficient = 1f;
-            damageCoefficient = 1f;
+            damageCoefficient = 2f;
 
             base.OnEnter();
             base.characterDirection.forward = GetAimRay().direction;
-            crocoDamageTypeController = GetComponent<CrocoDamageTypeController>();
 
         }
 
@@ -242,177 +246,6 @@ namespace FrenzyMod
         public override InterruptPriority GetMinimumInterruptPriority()
         {
             return base.GetMinimumInterruptPriority();
-        }
-    }
-
-
-    public class FireAcidSpray : BaseSkillState
-    {
-        public GameObject effectPrefab;
-
-        public static GameObject impactEffectPrefab;
-
-        private CrocoDamageTypeController crocoDamageTypeController;
-
-        public static float maxDistance;
-
-        public static float radius;
-
-        public static float baseEntryDuration = 2f;
-
-        public static float baseAcidSprayDuration = 1.5f;
-
-        public static float baseExitDuration = 0.1f;
-
-        public static float damageCoefficient = 1f;
-
-        public static float procCoefficient;
-
-        public static float tickFrequency;
-
-        public static float force = 10f;
-
-        public static float stopwatch;
-
-        public static string startAttackSoundString;
-
-        public static string endAttackSoundString;
-
-        public static string muzzleName;
-
-        public static float recoilForce;
-
-        private bool isCrit;
-
-        private bool hasBegunAcidSpray;
-
-        private float entryDuration;
-
-        private float acidSprayDuration;
-
-        private float exitDuration;
-
-        private float acidSprayStopwatch;
-
-        private Animator modelAnimator;
-
-        private string layerName;
-
-        private string playbackRateParam;
-
-        private float playbackRate;
-
-        public override void OnEnter()
-        {
-            base.OnEnter();
-            impactEffectPrefab = Addressables.LoadAssetAsync<GameObject>("RoR2/Base/Croco/CrocoDiseaseImpactEffect.prefab").WaitForCompletion();
-            modelAnimator = GetModelAnimator();
-            AnimationClip[] animationClips = modelAnimator.runtimeAnimatorController.animationClips;
-            AnimatorControllerParameter[] parameters = modelAnimator.parameters;
-            for (int i = 0; i < animationClips.Length; i++)
-            {
-                Debug.Log("Animationclips: " + animationClips[0].name);
-                Debug.Log("Animationclips: " + animationClips[0].hasGenericRootTransform);
-                Debug.Log("Animationclips: " + animationClips[0].hasMotionCurves);
-                Debug.Log("Animationclips: " + animationClips[0].hasMotionFloatCurves);
-                Debug.Log("Animationclips: " + animationClips[0].hasRootCurves);
-                Debug.Log("Animationclips: " + animationClips[0].hasRootMotion);
-            }
-            layerName = "Gesture, Mouth";
-            playbackRateParam = "AcidSpray.playbackRate";
-
-            crocoDamageTypeController = GetComponent<CrocoDamageTypeController>();
-            tickFrequency = 4f;
-
-            stopwatch = 0f;
-            entryDuration = baseEntryDuration / attackSpeedStat;
-            acidSprayDuration = baseAcidSprayDuration;
-            exitDuration = baseExitDuration;
-
-            if ((bool)base.characterBody)
-            {
-                base.characterBody.SetAimTimer(entryDuration + acidSprayDuration + 1f);
-            }
-            int num = Mathf.CeilToInt(acidSprayDuration * tickFrequency);
-            if (base.isAuthority && (bool)base.characterBody)
-            {
-                isCrit = Util.CheckRoll(critStat, base.characterBody.master);
-            }
-            //PlayAnimation(layerName, "FireSpit", playbackRateParam, entryDuration + exitDuration);
-            PlayAnimation("Gesture, Mouth", "FireSpit", "AcidSpray.playbackRate", entryDuration);
-        }
-
-        public override void OnExit()
-        {
-            base.OnExit();
-            int layerIndex = modelAnimator.GetLayerIndex(layerName);
-            float length = modelAnimator.GetCurrentAnimatorStateInfo(layerIndex).length;
-            modelAnimator.SetFloat(playbackRateParam, length/(entryDuration + exitDuration));
-            modelAnimator.Update(0f);
-        }
-
-        public override void FixedUpdate()
-        {
-            base.FixedUpdate();
-            stopwatch += Time.fixedDeltaTime;
-            if (stopwatch >= entryDuration && !hasBegunAcidSpray)
-            {
-                modelAnimator.SetFloat(playbackRateParam, 0f);
-                modelAnimator.Update(0f);
-                hasBegunAcidSpray = true;
-                Util.PlaySound(startAttackSoundString, base.gameObject);
-                FireAcid();
-            }
-            if (hasBegunAcidSpray)
-            {
-                acidSprayStopwatch += Time.deltaTime;
-                float num = 1f / tickFrequency / attackSpeedStat;
-                if (acidSprayStopwatch > num)
-                {
-                    acidSprayStopwatch -= num;
-                    FireAcid();
-                }
-            }
-            if (stopwatch >= acidSprayDuration + entryDuration && base.isAuthority)
-            {
-                outer.SetNextStateToMain();
-            }
-        }
-
-        public override InterruptPriority GetMinimumInterruptPriority()
-        {
-            return InterruptPriority.Skill;
-        }
-
-        private void FireAcid()
-        {
-            Ray aimRay = GetAimRay();
-            if (base.isAuthority)
-            {
-                BulletAttack bulletAttack = new BulletAttack();
-                bulletAttack.owner = base.gameObject;
-                bulletAttack.weapon = base.gameObject;
-                bulletAttack.origin = aimRay.origin;
-                bulletAttack.aimVector = aimRay.direction;
-                bulletAttack.minSpread = 0f;
-                bulletAttack.damage = damageCoefficient * damageStat;
-                bulletAttack.force = force;
-                bulletAttack.muzzleName = muzzleName;
-                bulletAttack.hitEffectPrefab = impactEffectPrefab;
-                bulletAttack.isCrit = isCrit;
-                bulletAttack.radius = radius;
-                bulletAttack.falloffModel = BulletAttack.FalloffModel.None;
-                bulletAttack.stopperMask = LayerIndex.world.mask;
-                bulletAttack.procCoefficient = procCoefficient;
-                bulletAttack.maxDistance = maxDistance;
-                bulletAttack.smartCollision = true;
-                bulletAttack.damageType = (crocoDamageTypeController ? crocoDamageTypeController.GetDamageType() : DamageType.Generic);
-                bulletAttack.Fire();
-                if ((bool)base.characterMotor)
-                {
-                    base.characterMotor.ApplyForce(aimRay.direction * (0f - recoilForce));
-                }
-            }
         }
     }
 }
